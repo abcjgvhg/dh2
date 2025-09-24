@@ -13,6 +13,13 @@ export async function onRequestPost(context){
         else if (String(ra) === 'only') mode = 'only';
       } catch(e){}
     }
+
+    // fallback: if KV didn't define requireAuth, check environment variable AUTH_ENABLED
+    try {
+      const envVal = String(env.AUTH_ENABLED || env.AUTH || '').trim().toLowerCase();
+      if (envVal === 'true') mode = 'true';
+      else if (envVal === 'only') mode = 'only';
+    } catch(e){}
     const editRequiresAuth = (mode === 'true' || mode === 'only');
     if (editRequiresAuth){
       const cookieHeader = request.headers.get('cookie') || '';

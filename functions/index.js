@@ -12,6 +12,13 @@ export async function onRequest(context){
         else if (String(ra) === 'only') mode = 'only';
       } catch(e){}
     }
+
+    // fallback: if KV didn't define requireAuth, check environment variable AUTH_ENABLED
+    try {
+      const envVal = String(env.AUTH_ENABLED || env.AUTH || '').trim().toLowerCase();
+      if (envVal === 'true') mode = 'true';
+      else if (envVal === 'only') mode = 'only';
+    } catch(e){}
     // if pages don't require auth, just serve assets
     if (mode !== 'true') return await env.ASSETS.fetch(request);
 

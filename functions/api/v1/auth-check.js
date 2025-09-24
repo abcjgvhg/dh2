@@ -12,6 +12,13 @@ export async function onRequestGet(context){
         else if (String(ra) === 'only') mode = 'only';
       } catch(e){}
     }
+
+    // fallback: if KV didn't define requireAuth, check environment variable AUTH_ENABLED
+    try {
+      const envVal = String(env.AUTH_ENABLED || env.AUTH || '').trim().toLowerCase();
+      if (envVal === 'true') mode = 'true';
+      else if (envVal === 'only') mode = 'only';
+    } catch(e){}
     // If mode isn't 'true' then pages don't require auth; for API we still report authed:true
     const cookieHeader = request.headers.get('cookie') || '';
     const cookies = Object.fromEntries(cookieHeader.split(';').map(p=>p.trim()).filter(Boolean).map(p=>p.split('=').map(x=>x.trim())));
