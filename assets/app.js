@@ -78,7 +78,7 @@
             </div>
           </div>
           <div class="controls">
-            <div class="muted">编辑权限: ${window.__nav_meta && window.__nav_meta.authEnabled === 'only' ? '需要密码' : '开放'}</div>
+            <div class="muted">编辑权限: ${window.__nav_meta && window.__nav_meta.authEnabled === 'false' ? '开放' : (window.__nav_meta.authEnabled === 'only' ? '编辑需要密码' : '访问需登录')}</div>
             <button id="btnNewGroup" class="btn">新增分组</button>
             <button id="btnSettings" class="btn ghost">网站设置</button>
             <button id="btnExport" class="btn ghost small">导出</button>
