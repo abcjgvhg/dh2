@@ -10,6 +10,37 @@
   function escapeAttrClient(s){ if (s==null) return ''; return String(s).replace(/"/g,'&quot;'); }
 
   let state = null;
+
+  /* toast（顶部） */
+  function showToast(message, opts = {}) {
+    const type = opts.type || 'info';
+    const duration = typeof opts.duration === 'number' ? opts.duration : 2200;
+    let container = document.getElementById('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      container.className = 'toast-container';
+      document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast ' + (type === 'success' ? 'success' : (type === 'error' ? 'error' : ''));
+    toast.textContent = message;
+    container.appendChild(toast);
+    requestAnimationFrame(()=> { toast.classList.add('show'); });
+    const to = setTimeout(()=> {
+      toast.classList.remove('show');
+      setTimeout(()=> { try { container.removeChild(toast); } catch(e){} }, 260);
+    }, duration);
+    return () => { clearTimeout(to); toast.classList.remove('show'); setTimeout(()=> { try { container.removeChild(toast); } catch(e){} }, 260); };
+  }
+
+  // debounce save
+  let _saveTimer = null;
+  function saveStateDebounced(){
+    if (_saveTimer) clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(async ()=>{ try { await saveState(); } catch(e){ console.warn('save failed', e); } _saveTimer = null; }, 900);
+  }
+
   try {
     const [st, meta] = await Promise.all([fetchState(), fetchMeta()]);
     state = st;
@@ -329,8 +360,30 @@
     else { document.getElementById('loginMsg').textContent = j?.msg || '登录失败'; }
   };
 
-  document.getElementById('btnExport').onclick = ()=>{
-      const dataStr = JSON.stringify(state, null, 2);
+  
+document.getElementById('btnExport').onclick = ()=>{
+      const groupsOut = state.groups.map((g, idx) => ({
+        id: g.id,
+        name: g.name,
+        order_num: idx
+      }));
+      const sitesOut = [];
+      state.groups.forEach(g=>{
+        (g.items||[]).forEach((it, idx)=>{
+          sitesOut.push({
+            id: it.id,
+            group_id: g.id,
+            name: it.title || '',
+            url: it.url || '',
+            icon: '',
+            description: it.desc || '',
+            notes: '',
+            order_num: idx
+          });
+        });
+      });
+      const payload = { groups: groupsOut, sites: sitesOut, version: "1.0", exportDate: (new Date()).toISOString() };
+      const dataStr = JSON.stringify(payload, null, 2);
       const blob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -340,87 +393,105 @@
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      alert('数据已导出');
+      showToast('已导出 groups & sites', {type:'success'});
   };
-
-  const importBtn = document.getElementById('btnImport');
+const importBtn = document.getElementById('btnImport');
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
   fileInput.accept = 'application/json';
   importBtn.appendChild(fileInput);
 
-  fileInput.onchange = async e => {
+  
+fileInput.onchange = async e => {
       if (!await requireEditAuth()) return;
       const file = e.target.files[0];
       if (!file) return;
-      if (confirm('导入数据将覆盖当前所有内容，是否继续？')){
+      if (confirm('导入数据将覆盖当前所有分组与网站（settings 不会被覆盖），是否继续？')){
           try {
               const text = await file.text();
               const importedData = JSON.parse(text);
-              if (importedData.sites && importedData.groups) {
-                  const newSettings = {
-                      title: importedData.configs && importedData.configs['site.title'] ? importedData.configs['site.title'] : state.settings.title,
-                      background: "",
-                      backgroundMode: "single",
-                      backgrounds: [],
-                      bgRotateInterval: 0,
-                      bingMarket: "en-US",
-                      overlayOpacity: 0.12,
-                      tagOpacity: 0.12,
-                      groupOpacity: 0.96,
-                      darkMode: false,
-                      liquidGlass: false,
-                      liquidStrength: 0.5,
-                      bgNoCache: false,
-                      requireAuth: false
-                  };
-                  const newGroups = importedData.groups.map(g => {
-                      const items = importedData.sites
-                          .filter(s => s.group_id === g.id)
-                          .map(s => ({
-                              id: s.id,
-                              title: s.name,
-                              url: s.url,
-                              desc: s.description || s.notes
-                          }));
-                      return {
-                          id: g.id,
-                          name: g.name,
-                          items: items
-                      };
+
+              if (importedData && importedData.groups && importedData.sites) {
+                  const groupsArr = (importedData.groups || []).slice().sort((a,b) => (Number(a.order_num||0) - Number(b.order_num||0)));
+                  const newGroups = groupsArr.map(g => ({
+                    id: g.id != null ? String(g.id) : ('g_' + Math.random().toString(36).slice(2,8)),
+                    name: g.name || g.title || '分组',
+                    items: []
+                  }));
+
+                  const sitesArr = (importedData.sites || []).slice().sort((a,b) => (Number(a.order_num||0) - Number(b.order_num||0)));
+                  sitesArr.forEach(s => {
+                    const gid = s.group_id != null ? String(s.group_id) : null;
+                    let group = newGroups.find(g => String(g.id) === String(gid));
+                    if (!group) {
+                      group = newGroups.find(g => g.name === '其他') || null;
+                      if (!group) {
+                        const newG = { id: 'g_other_' + Math.random().toString(36).slice(2,6), name: '其他', items: [] };
+                        newGroups.push(newG);
+                        group = newG;
+                      }
+                    }
+                    group.items.push({
+                      id: s.id != null ? String(s.id) : ('i_' + Date.now() + Math.random().toString(36).slice(2,6)),
+                      title: s.name || s.title || '',
+                      url: s.url || s.link || '',
+                      desc: s.description || s.notes || s.desc || ''
+                    });
                   });
-                  state = { settings: newSettings, groups: newGroups };
-              } else if (importedData.settings && importedData.groups) {
-                  state = importedData;
+
+                  state.groups = newGroups;
+                  state = normalizeStateClient(state);
+
+                  applySettings();
+                  renderGrid();
+                  window.__nav_state = state;
+                  window.__nav_save = saveState;
+
+                  showToast('已导入 groups & sites（settings 未被覆盖）。请点击“保存”持久化。', {type:'success', duration:3000});
               } else {
-                  throw new Error('导入文件格式不正确或版本不兼容');
+                  throw new Error('导入文件格式不正确：需要包含 groups 与 sites 数组');
               }
-              applySettings();
-              renderGrid();
-              alert('数据已成功导入，请点击“保存”以应用到服务器。');
           } catch(error) {
-              alert('导入失败: ' + error.message);
+              showToast('导入失败: ' + (error && error.message ? error.message : String(error)), {type:'error', duration:4000});
           } finally {
               fileInput.value = '';
           }
-      } else { fileInput.value = ''; }
+      } else {
+          fileInput.value = '';
+      }
   };
 
+
   /* ---------------- 渲染网格（含折叠按钮） ---------------- */
-  function renderGrid(){
+  
+function renderGrid(){
     grid.innerHTML = '';
-    state.groups.forEach(group=>{
+    state.groups.forEach((group, groupIndex)=>{
       const col = document.createElement('div');
       col.className = 'col ' + (state.settings.liquidGlass ? 'liquid' : 'plain');
-      col.draggable = true;
       col.dataset.gid = group.id;
 
       const linksId = 'links_' + group.id;
 
       col.innerHTML = `
-        <h3>${escapeHtmlClient(group.name)} 
-          <span style="font-size:12px" class="muted">(${group.items.length})</span>
-        </h3>
+        <div class="col-header">
+          <h3 title="${escapeHtmlClient(group.name)}">${escapeHtmlClient(group.name)}</h3>
+          <div style="flex:1"></div>
+          <div class="group-controls">
+            <button class="order-btn" data-action="group-up" data-gid="${group.id}" title="上移">↑</button>
+            <button class="order-btn" data-action="group-down" data-gid="${group.id}" title="下移">↓</button>
+            <div style="width:8px"></div>
+            <div class="muted">(${(group.items||[]).length})</div>
+          </div>
+          <button class="more-btn" data-role="group-more" title="操作">⋯</button>
+          <div class="controls-popup" aria-hidden="true">
+            <button class="order-btn" data-action="group-up" data-gid="${group.id}" title="上移">↑</button>
+            <button class="order-btn" data-action="group-down" data-gid="${group.id}" title="下移">↓</button>
+            <button class="small btn ghost" data-gid="${group.id}" data-action="edit">编辑</button>
+            <button class="small btn ghost" data-gid="${group.id}" data-action="del">删除</button>
+          </div>
+        </div>
+
         <div class="muted meta">管理：
           <button class="small btn ghost" data-gid="${group.id}" data-action="add">+网站</button> 
           <button class="small btn ghost" data-gid="${group.id}" data-action="edit">编辑</button> 
@@ -429,29 +500,64 @@
             <button class="collapse-btn" data-gid="${group.id}" data-action="toggle">收起/展开</button>
           </span>
         </div>
-        <div class="links" id="${linksId}">${group.items.map(it => `
-          <div class="link" data-gid="${group.id}" data-id="${it.id}" data-url="${escapeAttrClient(it.url)}" draggable="true">
-            <div class="meta" style="flex:1">
-              <a href="${escapeAttrClient(it.url)}" target="_blank" rel="noopener">${escapeHtmlClient(it.title)}</a>
-              <small>${escapeHtmlClient(it.desc || it.url)}</small>
+
+        <div class="links" id="${linksId}">${(group.items||[]).map((it, idx)=>`
+          <div class="link" data-gid="${group.id}" data-id="${it.id}" data-url="${escapeAttrClient(it.url)}">
+            <div class="meta">
+              <a href="${escapeAttrClient(it.url)}" target="_blank" rel="noopener" title="${escapeHtmlClient(it.title)}">${escapeHtmlClient(it.title)}</a>
+              <small title="${escapeHtmlClient(it.desc || it.url)}">${escapeHtmlClient(it.desc || it.url)}</small>
             </div>
-            <div style="display:flex;gap:6px">
+            <div class="item-controls">
+              <button class="order-btn" data-action="item-up" data-gid="${group.id}" data-id="${it.id}" title="上移">↑</button>
+              <button class="order-btn" data-action="item-down" data-gid="${group.id}" data-id="${it.id}" title="下移">↓</button>
+              <button class="order-btn" data-action="item-left" data-gid="${group.id}" data-id="${it.id}" title="移到上一个分组">←</button>
+              <button class="order-btn" data-action="item-right" data-gid="${group.id}" data-id="${it.id}" title="移到下一个分组">→</button>
+              <button class="small btn ghost" data-gid="${group.id}" data-id="${it.id}" data-action="edit">编辑</button>
+              <button class="small btn ghost" data-gid="${group.id}" data-id="${it.id}" data-action="del">删除</button>
+            </div>
+
+            <button class="more-btn" data-role="item-more" title="更多">⋯</button>
+            <div class="controls-popup" aria-hidden="true">
+              <button class="order-btn" data-action="item-up" data-gid="${group.id}" data-id="${it.id}" title="上移">↑</button>
+              <button class="order-btn" data-action="item-down" data-gid="${group.id}" data-id="${it.id}" title="下移">↓</button>
+              <button class="order-btn" data-action="item-left" data-gid="${group.id}" data-id="${it.id}" title="移到上一个分组">←</button>
+              <button class="order-btn" data-action="item-right" data-gid="${group.id}" data-id="${it.id}" title="移到下一个分组">→</button>
               <button class="small btn ghost" data-gid="${group.id}" data-id="${it.id}" data-action="edit">编辑</button>
               <button class="small btn ghost" data-gid="${group.id}" data-id="${it.id}" data-action="del">删除</button>
             </div>
           </div>`).join('')}</div>`;
       grid.appendChild(col);
     });
-    attachDragHandlers();
     attachCollapseHandlers();
   }
 
-  /* ---------------- 按钮委托（add/edit/del/toggle） ---------------- */
+  /* ---------------- 按钮委托（add/edit/del/toggle + 排序按钮 + more toggle） ---------------- */
   document.body.addEventListener('click', async (e)=>{
+    const clickedMore = e.target.closest('.more-btn');
+    const clickedPopup = e.target.closest('.controls-popup');
+    if (!clickedMore && !clickedPopup) {
+      document.querySelectorAll('.col.show-controls, .link.show-controls').forEach(el=>el.classList.remove('show-controls'));
+    }
+
     const btn = e.target.closest('button');
-    if (btn){
-      const action = btn.dataset.action;
-      if (!action) return;
+    if (!btn) {
+      const a = e.target.closest('a');
+      if (a) return;
+      return;
+    }
+
+    if (btn.classList.contains('more-btn')) {
+      e.preventDefault(); e.stopPropagation();
+      const parentCol = btn.closest('.link') || btn.closest('.col');
+      if (!parentCol) return;
+      const isShown = parentCol.classList.contains('show-controls');
+      document.querySelectorAll('.col.show-controls, .link.show-controls').forEach(el=>el.classList.remove('show-controls'));
+      if (!isShown) parentCol.classList.add('show-controls');
+      return;
+    }
+
+    const action = btn.dataset.action;
+    if (action === 'add' || action === 'edit' || action === 'del' || action === 'toggle') {
       const gid = btn.dataset.gid;
       const id = btn.dataset.id;
       if (action === 'add'){
@@ -461,36 +567,36 @@
         const url = prompt('URL：')||'';
         if (!url) return;
         const desc = prompt('描述：')||'';
-        const g = state.groups.find(x=>x.id===gid);
+        const g = state.groups.find(x=>String(x.id)===String(gid));
         g.items.push({ id:'i_'+Date.now(), title, url, desc });
-        renderGrid();
+        renderGrid(); saveStateDebounced();
       } else if (action === 'edit'){
         if (id){
           if (!await requireEditAuth()) return;
-          const g = state.groups.find(x=>x.id===gid);
-          const it = g.items.find(x=>x.id===id);
+          const g = state.groups.find(x=>String(x.id)===String(gid));
+          const it = g.items.find(x=>String(x.id)===String(id));
           const title = prompt('标题：', it.title) || it.title;
           const url = prompt('URL：', it.url) || it.url;
           const desc = prompt('描述：', it.desc) || it.desc;
           it.title = title; it.url = url; it.desc = desc;
-          renderGrid();
-        } else {
+          renderGrid(); saveStateDebounced();
+      } else {
           if (!await requireEditAuth()) return;
-          const g = state.groups.find(x=>x.id===gid);
+          const g = state.groups.find(x=>String(x.id)===String(gid));
           const name = prompt('分组名称：', g.name) || g.name;
-          g.name = name; renderGrid();
+          g.name = name; renderGrid(); saveStateDebounced();
         }
       } else if (action === 'del'){
         if (!await requireEditAuth()) return;
         if (id){
           if (!confirm('确认删除该网站？')) return;
-          const g = state.groups.find(x=>x.id===gid);
-          g.items = g.items.filter(x=>x.id!==id);
-          renderGrid();
+          const g = state.groups.find(x=>String(x.id)===String(gid));
+          g.items = g.items.filter(x=>String(x.id)!==String(id));
+          renderGrid(); saveStateDebounced();
         } else {
           if (!confirm('确认删除整个分组？')) return;
-          state.groups = state.groups.filter(x=>x.id!==gid);
-          renderGrid();
+          state.groups = state.groups.filter(x=>String(x.id)!==String(gid));
+          renderGrid(); saveStateDebounced();
         }
       } else if (action === 'toggle') {
         const linksEl = document.getElementById('links_' + gid);
@@ -499,19 +605,81 @@
       return;
     }
 
-    const a = e.target.closest('a');
-    if (a) return;
-
-    const linkCard = e.target.closest('.link');
-    if (linkCard){
-      const url = linkCard.dataset.url || (linkCard.querySelector('a') ? linkCard.querySelector('a').href : null);
-      if (url){
-        window.open(url, '_blank', 'noopener');
-      }
+    if (action && action.startsWith('group-')) {
+      const gid = btn.dataset.gid;
+      if (!await requireEditAuth()) return;
+      if (action === 'group-up') { moveGroup(gid, -1); }
+      else if (action === 'group-down') { moveGroup(gid, +1); }
+      return;
     }
+    if (action && (action.startsWith('item-'))) {
+      const gid = btn.dataset.gid;
+      const id = btn.dataset.id;
+      if (!await requireEditAuth()) return;
+      if (action === 'item-up') { moveItemWithinGroup(gid, id, -1); }
+      else if (action === 'item-down') { moveItemWithinGroup(gid, id, +1); }
+      else if (action === 'item-left') { moveItemToAdjacentGroup(gid, id, -1); }
+      else if (action === 'item-right') { moveItemToAdjacentGroup(gid, id, +1); }
+      return;
+    }
+
   });
 
-  /* ---------------- 拖拽处理 ---------------- */
+  /* ---------------- 排序操作 ---------------- */
+  function moveGroup(gid, dir){
+    const idx = state.groups.findIndex(g => String(g.id) === String(gid));
+    if (idx === -1) return;
+    const to = idx + dir;
+    if (to < 0 || to >= state.groups.length) return;
+    const [g] = state.groups.splice(idx,1);
+    state.groups.splice(to,0,g);
+    renderGrid(); saveStateDebounced();
+  }
+
+  function moveItemWithinGroup(gid, id, dir){
+    const g = state.groups.find(g => String(g.id) === String(gid));
+    if (!g) return;
+    const idx = g.items.findIndex(it => String(it.id) === String(id));
+    if (idx === -1) return;
+    const to = idx + dir;
+    if (to < 0 || to >= g.items.length) return;
+    const [it] = g.items.splice(idx,1);
+    g.items.splice(to,0,it);
+    renderGrid(); saveStateDebounced();
+  }
+
+  function moveItemToAdjacentGroup(gid, id, dir){
+    const gIdx = state.groups.findIndex(g => String(g.id) === String(gid));
+    if (gIdx === -1) return;
+    const toGIdx = gIdx + dir;
+    if (toGIdx < 0 || toGIdx >= state.groups.length) return;
+    const g = state.groups[gIdx];
+    const toG = state.groups[toGIdx];
+    const idx = g.items.findIndex(it => String(it.id) === String(id));
+    if (idx === -1) return;
+    const [it] = g.items.splice(idx,1);
+    toG.items.push(it);
+    renderGrid(); saveStateDebounced();
+  }
+
+  /* ---------------- 折叠逻辑（同） ---------------- */
+  function attachCollapseHandlers(){
+    document.querySelectorAll('.links').forEach(links=>{
+      links.style.transition = 'max-height 260ms ease, opacity 260ms ease';
+      links.style.overflow = 'hidden';
+      links.style.maxHeight = links.scrollHeight + 'px';
+      links.style.opacity = '1';
+    });
+  }
+  function toggleCollapseElement(el){
+    if (!el.classList.contains('collapsed')) {
+      el.style.maxHeight = el.scrollHeight + 'px';
+      void el.offsetHeight;
+      el.style.maxHeight = '0px';
+      el.style.opacity = '0';
+      el.classList.add('collapsed');
+    } else {
+        /* ---------------- 拖拽处理 ---------------- */
   function attachDragHandlers(){
     document.querySelectorAll('.col').forEach(col=>{
       col.addEventListener('dragstart', ev=>{
@@ -738,10 +906,9 @@
     if (!await requireEditAuth()) return;
     try {
       const r = await fetch('/api/v1/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(state) });
-      if (r.ok) { alert('已保存'); return true; }
-      else { const j = await r.json().catch(()=>({})); alert('保存失败: '+(j.msg||r.statusText)); return false; }
+      if (r.ok) { showToast('已保存', {type:'success'}); return true; } else { const j = await r.json().catch(()=>({})); showToast('保存失败: '+(j.msg||r.statusText), {type:'error', duration:3500}); return false; }
     } catch (e) {
-      alert('保存异常: '+e.message);
+      showToast('保存出错', {type:'error', duration:3500});
       return false;
     }
   }

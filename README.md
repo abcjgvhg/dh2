@@ -19,7 +19,7 @@
   - 该 KV 用于存储 state（键名 'state'）和 session（前缀 'session:'）
 - 必需/可选环境变量（在 Pages -> Environment Variables 中设置）：
   - AUTH_PASSWORD （必填用于登录）
-  - AUTH_ENABLED ("true" 或 "only" 或 "false"    // "true" = 访问首页与编辑均需登录； "only" = 只在编辑时需要登录； "false" = 不需要登录)
+  - AUTH_ENABLED  （可选，设为 'only' 则强制站点需要密码）
   - SESSION_TTL    （可选，会话有效秒数，默认 86400）
 - 部署步骤（Cloudflare Pages）：
   1. 在你的仓库放入本项目内容，Pages 的 Framework Preset 选择 "None"（纯静态）。
