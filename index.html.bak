@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>导航 (Pages)</title>
+<title id="pageTitle">导航</title>
 <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
