@@ -7,7 +7,7 @@ export async function onRequestGet(context){
   if (sRaw){
     try { const st = JSON.parse(sRaw); requireAuth = Boolean(st?.settings?.requireAuth); } catch(e){}
   }
-  const effective = String(env.AUTH_ENABLED || 'false') === 'only' || requireAuth === true;
+  const effective = Boolean(requireAuth) === true;
   if (!effective) return new Response(JSON.stringify({ authed: true }), { headers:{ 'Content-Type':'application/json' }});
   const cookieHeader = request.headers.get('cookie') || '';
   const cookies = Object.fromEntries(cookieHeader.split(';').map(s=>s.trim()).filter(Boolean).map(p=>p.split('=').map(x=>x.trim())));

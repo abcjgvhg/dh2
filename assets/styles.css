@@ -1,8 +1,8 @@
 /* 样式与原项目保持一致（已简化） */
 :root{ --overlay-opacity: 0.12; --tag-opacity: 0.12; --group-opacity: 0.96; --accent-rgb: 91,140,255; --card-radius: 12px; --text-light: #ffffff; --text-dark: #0f1720; --muted-dark: #6b7280; --muted-light: #7f8aa8; --card-border: rgba(15,23,36,0.06); --liquid-strength: 0.5; }
 html,body{height:100%;margin:0;}
-.fixed-bg-wrap { position: fixed; inset:0; z-index:-1; overflow:hidden; background:#000; pointer-events:none;}
-.fixed-bg-wrap img { position:absolute; inset:0; width:100vw; height:100vh; object-fit:cover; object-position:center center; transition: opacity 600ms ease, transform 800ms ease; -webkit-transform:translateZ(0); pointer-events:none; }
+.fixed-bg-wrap { position: fixed; inset:0; z-index:-1; overflow:hidden; background: transparent; pointer-events:none;}
+.fixed-bg-wrap img { min-width:100%; min-height:100%;  position:absolute; inset:0; width:100vw; height:100vh; object-fit:cover; object-position:center center; transition: opacity 600ms ease, transform 800ms ease; -webkit-transform:translateZ(0); pointer-events:none; }
 #fixed-bg-img{ opacity:0; transform:scale(1.02); } #fixed-bg-img-2{ opacity:0; transform:scale(1.02); }
 body{ font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; color:var(--text-dark); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; transition: color .2s ease; background-color: rgba(2,6,23,var(--overlay-opacity)); touch-action:auto; -webkit-overflow-scrolling:touch; }
 input, textarea, select, button { font-size:16px; -webkit-text-size-adjust:100%; box-sizing:border-box; }
