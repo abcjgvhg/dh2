@@ -444,9 +444,7 @@ fileInput.onchange = async e => {
 
                   applySettings();
                   renderGrid();
-                    }
-  }
-window.__nav_state = state;
+                  window.__nav_state = state;
                   window.__nav_save = saveState;
 
                   showToast('已导入 groups & sites（settings 未被覆盖）。请点击“保存”持久化。', {type:'success', duration:3000});
